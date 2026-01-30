@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    // เป้าหมายการแปลงไฟล์
+    "target": "es6",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./",
+    
+    // การจัดการ Module (สำคัญมากสำหรับการแก้ Error นี้)
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    
+    // การตั้งค่าความเข้มงวด (ปิดตัวที่โหดๆ ออกไปก่อน)
+    "strict": true,
+    "verbatimModuleSyntax": false, 
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["**/*"],
+  "exclude": ["node_modules", "dist"]
+}

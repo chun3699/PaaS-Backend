@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # ฐานข้อมูล
+  db:
+    image: mysql:8.0
+    container_name: production-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "ubuntu@csmsu" # 🔐 รหัสผ่าน Root
+      MYSQL_DATABASE: "paas"           # ชื่อ Database ที่จะสร้างให้อัตโนมัติ
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Backend ของเรา
+  backend:
+    build: .
+    container_name: production-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASS: ubuntu@csmsu
+      DB_NAME: paas
+      PORT: 3000
+    depends_on:
+      - db
+
+  # phpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: production-pma
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:

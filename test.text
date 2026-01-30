@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # 🐬 ส่วนของ MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: production-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "ubuntu@csmsu"  # 🔐 รหัสผ่าน Root (เปลี่ยนด้วย!)
+      MYSQL_DATABASE: "paas_project_db"                       # ชื่อ Database เริ่มต้น
+      MYSQL_USER: "admin"                            # user ที่จะให้ Node.js ใช้
+      MYSQL_PASSWORD: "userubuntu@csmsu"             # password ที่จะให้ Node.js ใช้
+    ports:
+      - "3306:3306"  # เปิด Port 3306 ของ Server ให้ข้างนอกเข้าถึงได้
+    volumes:
+      - mysql_data:/var/lib/mysql  # 💾 สำคัญมาก! เก็บข้อมูลถาวร
+    command: --default-authentication-plugin=mysql_native_password
+
+  # 🐘 (แถม) phpMyAdmin เอาไว้จัดการ DB ผ่านเว็บ (ถ้าไม่เอาลบส่วนนี้ทิ้งได้)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: production-pma
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    ports:
+      - "8080:80"  # เข้าผ่าน http://IP-SERVER:8080
+    depends_on:
+      - db
+
+volumes:
+  mysql_data: # ประกาศ Volume
+
+
+#clean code
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: production-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "ubuntu@csmsu" 
+      MYSQL_DATABASE: "paas_project_db" 
+      MYSQL_USER: "admin" 
+      MYSQL_PASSWORD: "userubuntu@csmsu" 
+    ports:
+      - "3306:3306" 
+    volumes:
+      - mysql_data:/var/lib/mysql 
+    command: --default-authentication-plugin=mysql_native_password
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: production-pma
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    ports:
+      - "8080:80" 
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:
