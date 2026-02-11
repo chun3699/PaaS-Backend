@@ -427,15 +427,14 @@ router.post("/users", async (req, res) => {
 });
 
 // ==========================================
-// 🗑️ Delete User (Both Portainer & SQL)
+// 🗑️ Delete User (Full Clean: MySQL DB + Portainer + Table)
 // ==========================================
 router.delete("/users/:id", async (req, res) => {
-    // รับค่า id ที่ส่งมา (ซึ่งคือ id_users ในฐานข้อมูลเรา)
     const localUserId = req.params.id;
 
     try {
-        // 🔹 1. ค้นหาข้อมูลจาก SQL ก่อน (เพื่อเอา portainer_user_id)
-        // ⚠️ ต้องใช้ WHERE id_users นะครับ ตามตารางของคุณ
+        // 🔹 1. ค้นหาข้อมูลจาก SQL ก่อน
+        // เพื่อเอา username (ไปลบ DB) และ portainer_user_id (ไปลบ Portainer)
         const [rows]: any = await db.query("SELECT * FROM users WHERE id_users = ?", [localUserId]);
 
         if (rows.length === 0) {
@@ -443,42 +442,62 @@ router.delete("/users/:id", async (req, res) => {
         }
 
         const targetUser = rows[0];
-        const portainerUserId = targetUser.portainer_user_id; // ดึง ID ของ Portainer ออกมา
+        const portainerUserId = targetUser.portainer_user_id;
+
+        // -----------------------------------------------------
+        // 🆕 STEP 1.5: ลบ Database MySQL ของ User (ถ้ามี)
+        // -----------------------------------------------------
+        // เช็คจากคอลัมน์ 'mysql' (เปลี่ยนจาก sql แล้ว)
+        if (targetUser.mysql === 1) {
+            console.log(`🧹 พบ Database ส่วนตัวของ ${targetUser.username} (mysql=1) กำลังลบทิ้ง...`);
+            try {
+                // เตรียมชื่อ DB และ User (Logic เดียวกับตอนสร้าง)
+                const safeUsername = targetUser.username.replace(/[^a-zA-Z0-9_]/g, "");
+                const dbName = `db_${safeUsername}`;
+                const dbUser = safeUsername;
+
+                // 1. ลบ Database
+                await db.query(`DROP DATABASE IF EXISTS ??`, [dbName]);
+                
+                // 2. ลบ User MySQL
+                await db.query(`DROP USER IF EXISTS '${dbUser}'@'%'`);
+                
+                console.log(`   - ✅ [MySQL] ลบ Database '${dbName}' และ User '${dbUser}' สำเร็จ`);
+            } catch (sqlErr: any) {
+                console.warn(`   - ⚠️ [MySQL] ลบไม่สำเร็จ (อาจไม่มีอยู่จริง): ${sqlErr.message}`);
+                // ไม่ throw error ปล่อยให้ทำงานต่อ เพราะเป้าหมายหลักคือลบ User ออกจากระบบ
+            }
+        }
 
         // 🔹 2. ลบ User ใน Portainer (ถ้ามี ID)
-        // เราใช้ try-catch ครอบตรงนี้ เพื่อให้ถ้าลบใน Portainer ไม่เจอ ก็ยังไปลบใน SQL ต่อได้
         if (portainerUserId) {
             try {
-                const authHeader = getAuthHeader(req); // 🔑 ใช้ฟังก์ชันเดิมของคุณดึง Token
-
+                const authHeader = getAuthHeader(req); // ใช้ฟังก์ชันเดิมในไฟล์
                 await portainerConn.delete(`/users/${portainerUserId}`, {
                     headers: { Authorization: authHeader }
                 });
-
-                console.log(`✅ Deleted Portainer User ID: ${portainerUserId}`);
+                console.log(`✅ [Portainer] Deleted User ID: ${portainerUserId}`);
             } catch (portainerError: any) {
                 // ถ้า Error 404 แปลว่าไม่มี user นี้ใน portainer แล้ว (ช่างมัน)
-                // แต่ถ้า Error อื่นให้แจ้งเตือนไว้
                 if (portainerError.response?.status !== 404) {
-                    console.warn(`⚠️ Failed to delete from Portainer: ${portainerError.message}`);
+                    console.warn(`⚠️ [Portainer] Delete Failed: ${portainerError.message}`);
                 }
             }
         }
 
-        // 🔹 3. ลบออกจาก SQL Database ของเรา
-        // ⚠️ ใช้ id_users เป็นเงื่อนไข
+        // 🔹 3. ลบออกจากตาราง users (Final Step)
         const [result]: any = await db.query("DELETE FROM users WHERE id_users = ?", [localUserId]);
 
         if (result.affectedRows === 0) {
             return res.status(500).json({ error: "ลบข้อมูลใน SQL ไม่สำเร็จ" });
         }
 
-        console.log(`✅ SQL User Deleted (ID: ${localUserId})`);
+        console.log(`✅ [System] User Deleted Completely (ID: ${localUserId})`);
 
         res.status(200).json({
-            message: "ลบผู้ใช้สำเร็จ",
+            message: "ลบผู้ใช้และข้อมูลทั้งหมด (Database & Portainer) สำเร็จ",
             deletedId: localUserId,
-            portainerDeleted: !!portainerUserId
+            mysqlDeleted: targetUser.mysql === 1
         });
 
     } catch (error: any) {
@@ -519,11 +538,11 @@ router.get("/teams", async (req, res) => {
 });
 
 // ==========================================
-// 👥 Route: Get All Users (แก้ชื่อ Column ให้ตรงรูปภาพ)
+// 👥 Route: Get All Users (เพิ่ม users.sql)
 // ==========================================
 router.get("/users", async (req, res) => {
   try {
-    // ⚠️ แก้ตรงนี้: เปลี่ยน users.id เป็น users.id_users
+    // ✅ เปลี่ยน sql -> mysql (ไม่ต้องใช้ backtick แล้ว เพราะ mysql ไม่ใช่คำสงวนในบริบทนี้)
     const sql = `
       SELECT 
         users.id_users, 
@@ -531,6 +550,7 @@ router.get("/users", async (req, res) => {
         users.username,
         users.role,
         users.portainer_team_id,
+        users.mysql, 
         teams.name AS team_name
       FROM users
       LEFT JOIN teams ON users.portainer_team_id = teams.portainer_team_id
